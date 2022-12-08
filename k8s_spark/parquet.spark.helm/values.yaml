@@ -1,0 +1,217 @@
+# Default values for parquet.spark.helm.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 4
+
+flask_env:
+  parquet_file_name: "s3a://cdms-dev-in-situ-parquet/CDMS_insitu.parquet"
+  spark_app_name: "parquet_flask_demo"
+  log_level: "DEBUG"
+  flask_prefix: "insitu"
+  parquet_metadata_tbl: "cdms_parquet_meta_dev_v1"
+  # "spark.shuffle.service.enabled": "true",  This should be "true", but "shuffle.service" not setup yet.
+  ## Specify Spark config options
+  ## When using AWS EKS IRSA for AWS auth, use: {"spark.hadoop.fs.s3a.aws.credentials.provider": "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider"}
+  spark_config_dict: {
+
+    "spark.shuffle.service.enabled": "false",
+    "spark.dynamicAllocation.shuffleTracking.enabled": "true",
+    "spark.dynamicAllocation.minExecutors": "4",
+    "spark.dynamicAllocation.maxExecutors": "4",
+    "spark.dynamicAllocation.initialExecutors": "4",
+    "spark.dynamicAllocation.executorAllocationRatio": "1",
+    "spark.dynamicAllocation.enabled": "true",
+
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider",
+    "spark.memory.offHeap.enabled":"true",
+    "spark.driver.memoryOverhead":"512M",
+    "spark.hadoop.fs.s3a.block.size":"1073741824",
+    "fs.s3a.block.size":"1073741824",
+    "spark.sql.sources.partitionOverwriteMode": "dynamic",
+    "spark.memory.offHeap.size":"512M"
+  }
+
+# AWS EKS IRSA is favored over AWS IAM User credentials when possible
+# Uncomment to enable IAM User Credential authentication
+# aws_creds:
+#   awskey: "xxxxxx"
+#   awssecret: "xxxxxx"
+#   awstoken: "xxxxxx"
+
+image:
+  repository: "waiphyojpl/cdms.parquet.flask"
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "t25"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  
+  # Annotations to add to the service account
+  annotations: {}
+    ## When using AWS EKS IRSA for AWS auth, set the below annotation using the configured IAM Role ARN.
+    #
+    # eks.amazonaws.com/role-arn: 'arn:aws:iam::xxxxxxxxxxxxxx:role/parquet-spark'
+  
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+extraEnvs: {}
+  # - name: master_spark_url
+  #   value: spark://my.external.spark.service:7077
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  ## Service Type: ClusterIP / NodePort
+  ##
+  type: NodePort
+  port: 9801
+  nodePort: 30801
+
+ingress:
+  enabled: false
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths: []
+        # - path: "/"
+        #   pathType: "ImplementationSpecific"
+  tls: []
+    # - secretName: chart-example-tls
+    #   hosts:
+    #     - chart-example.local
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# livenessProbe:
+#   httpGet:
+#     path: '/1.0/doc/'
+#     port: 9801
+#   initialDelaySeconds: 5
+# readinessProbe:
+#   httpGet:
+#     path: '/1.0/doc/'
+#     port: 9801
+#   initialDelaySeconds: 5
+
+## The following are sane bitnami-spark defaults when being pared with a parquet-spark-helm deployment.
+##
+bitnami-spark:
+  enabled: true
+  ## To retain bitnami-spark but render ONLY default bitnami-spark helm chart values, remove the following keys and values.
+  ##
+  image:
+    tag: 3.2.0-debian-10-r44
+  master:
+    ## When using AWS EKS IRSA for AWS auth, disable securityContext.  Can potentially also keep
+    ## enabled and set 'fsGroup: 65534', though this is currently untested.
+    ##
+    # securityContext:
+    #   enabled: false
+    #   fsGroup: 1001
+    #   runAsUser: 1001
+    #   runAsGroup: 0
+    #   seLinuxOptions: {}
+  worker:
+    ## @param worker.memoryLimit Set the maximum memory the worker is allowed to use
+    ##
+    memoryLimit: "4g"
+    ## @param worker.coreLimit Se the maximum number of cores that the worker can use
+    ##
+    coreLimit: "2"
+    ## @param worker.replicaCount Number of spark workers (will be the minimum number when autoscaling is enabled)
+    ##
+    replicaCount: 8
+    ## When using AWS EKS IRSA for AWS auth, disable securityContext.  Can potentially also keep
+    ## enabled and set 'fsGroup: 65534', though this is currently untested.
+    ##
+    # securityContext:
+    #   enabled: false
+    #   fsGroup: 1001
+    #   runAsUser: 1001
+    #   runAsGroup: 0
+    #   seLinuxOptions: {}
+
+  ## Service parameters
+  ##
+  service:
+    ## @param service.type Kubernetes Service type
+    ##
+    type: NodePort
+    ## Specify the nodePort(s) value(s) for the LoadBalancer and NodePort service types.
+    ## ref: https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport
+    ## @param service.nodePorts.cluster Kubernetes cluster node port
+    ## @param service.nodePorts.web Kubernetes web node port
+    ##
+    nodePorts:
+      cluster: "32131"
+      web: "31140"
+  ## Configure the ingress resource that allows you to access the
+  ## Spark installation. Set up the URL
+  ## ref: http://kubernetes.io/docs/user-guide/ingress/
+  ##
+  ingress:
+    ## @param ingress.hostname Default host for the ingress resource
+    ##
+    hostname: tt.spark.local.test1
+  serviceAccount:
+    ## @param serviceAccount.create Enable the creation of a ServiceAccount for Spark pods
+    ##
+    create: true
+    ## @param serviceAccount.name The name of the ServiceAccount to use.
+    ## If not set and create is true, a name is generated using the spark.fullname template
+    ##
+    name: ""
+    ## @param serviceAccount.annotations Annotations for Spark Service Account
+    ##
+    annotations: {}
+      ## When using AWS EKS IRSA for AWS auth, set the below annotation using the configured IAM Role ARN.
+      #
+      # eks.amazonaws.com/role-arn: 'arn:aws:iam::xxxxxxxxxxxxxx:role/parquet-spark'
+      ## @param serviceAccount.automountServiceAccountToken Automount API credentials for a service account.
+      ##
+    automountServiceAccountToken: true
